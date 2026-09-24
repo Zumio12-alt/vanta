@@ -74,18 +74,18 @@ public class VisionService extends Service {
                 getSystemService(Context.MEDIA_PROJECTION_SERVICE);
             if (mpm == null) { toast("V5 no mpm"); stopSelf(); return START_NOT_STICKY; }
 
-            projection = mpm.getMediaProjection(rc, rd);
-            if (projection == null) { toast("V6 projection null"); stopSelf(); return START_NOT_STICKY; }
-            toast("V7 projection obtained");
-
             try {
-                postForeground();
-                toast("V8 foreground ok");
-            } catch (Throwable t) {
-                toast("V8err " + t.getClass().getSimpleName() + " " + t.getMessage());
-                stopSelf();
-                return START_NOT_STICKY;
-            }
+     postForeground();
+    toast("V8 foreground ok");
+} catch (Throwable t) {
+    toast("V8err " + t.getClass().getSimpleName() + " " + t.getMessage());
+    stopSelf();
+    return START_NOT_STICKY;
+}
+
+projection = mpm.getMediaProjection(rc, rd);
+if (projection == null) { toast("V6 projection null"); stopForeground(true); stopSelf(); return START_NOT_STICKY; }
+toast("V7 projection obtained");
 
             WindowManager wm = (WindowManager) getSystemService(WINDOW_SERVICE);
             DisplayMetrics dm = new DisplayMetrics();
