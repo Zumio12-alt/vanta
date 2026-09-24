@@ -19,8 +19,16 @@ public class OverlayService extends Service {
 
     private static final String TAG = "VANTA-OVERLAY";
 
+    private static PanelView activeInstance;
+
     private WindowManager wm;
     private PanelView panel;
+
+    public static void showExisting() {
+        if (activeInstance != null) {
+            activeInstance.post(() -> activeInstance.setVisibility(View.VISIBLE));
+        }
+    }
 
     @Override
     public void onCreate() {
@@ -32,12 +40,17 @@ public class OverlayService extends Service {
 
     @Override
     public int onStartCommand(Intent i, int f, int s) {
-        if (panel == null) attach();
+        if (panel == null) {
+            attach();
+        } else {
+            panel.setVisibility(View.VISIBLE);
+        }
         return START_STICKY;
     }
 
     private void attach() {
         panel = new PanelView(this);
+        activeInstance = panel;
 
         int type = Build.VERSION.SDK_INT >= 26
             ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
@@ -52,8 +65,8 @@ public class OverlayService extends Service {
                 | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT);
         lp.gravity = Gravity.TOP | Gravity.START;
-        lp.x = 60;
-        lp.y = 180;
+        lp.x = 20;
+        lp.y = 120;
 
         try {
             wm.addView(panel, lp);
@@ -87,6 +100,7 @@ public class OverlayService extends Service {
         if (panel != null) {
             try { wm.removeView(panel); } catch (Throwable ignored) {}
             panel = null;
+            activeInstance = null;
         }
         super.onDestroy();
     }
