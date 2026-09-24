@@ -3,35 +3,59 @@ package com.vanta.codm;
 import android.app.Activity;
 import android.content.Intent;
 import android.graphics.Color;
+import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.text.InputType;
+import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-import android.widget.Toast;
 
 public class LoginActivity extends Activity {
 
+    private static final String TAG = "VANTA-LOGIN";
     private static final int ACCENT_RED = 0xFFFF0A28;
     private static final int TEXT_PRIMARY = 0xFFFFFFFF;
     private static final int TEXT_SECONDARY = 0xFFB0B5BF;
     private static final int TEXT_DIM = 0xFF6E7380;
 
+    private LinearLayout root;
+
     @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
+        Log.i(TAG, "onCreate entered");
 
-        int pad = dp(28);
-        LinearLayout root = new LinearLayout(this);
+        root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setGravity(Gravity.CENTER_HORIZONTAL);
         root.setBackgroundColor(Color.BLACK);
-        root.setPadding(pad, dp(72), pad, dp(40));
+        root.setPadding(dp(28), dp(72), dp(28), dp(40));
+        setContentView(root);
+        Log.i(TAG, "setContentView ok");
 
+        try {
+            buildUi();
+            Log.i(TAG, "buildUi ok");
+        } catch (Throwable t) {
+            Log.e(TAG, "buildUi failed", t);
+            root.removeAllViews();
+            TextView err = new TextView(this);
+            err.setText("LOGIN BUILD FAILED:\n\n"
+                + t.getClass().getName() + "\n\n"
+                + t.getMessage());
+            err.setTextColor(0xFFFF3B3B);
+            err.setTextSize(12);
+            err.setPadding(dp(16), dp(16), dp(16), dp(16));
+            root.addView(err);
+        }
+    }
+
+    private void buildUi() {
         TextView avatar = new TextView(this);
         avatar.setText("V");
         avatar.setTextColor(TEXT_PRIMARY);
@@ -76,7 +100,7 @@ public class LoginActivity extends Activity {
         person.setTextSize(20);
         inputBox.addView(person);
 
-        EditText key = new EditText(this);
+        final EditText key = new EditText(this);
         key.setHint("Enter license key");
         key.setHintTextColor(TEXT_DIM);
         key.setTextColor(TEXT_PRIMARY);
@@ -89,7 +113,7 @@ public class LoginActivity extends Activity {
         keyLp.leftMargin = dp(12);
         inputBox.addView(key, keyLp);
 
-        Preferences prefs = new Preferences(this);
+        final Preferences prefs = new Preferences(this);
         String saved = prefs.getStr("license", "");
         if (!saved.isEmpty()) key.setText(saved);
 
@@ -107,7 +131,7 @@ public class LoginActivity extends Activity {
         login.setTextColor(TEXT_PRIMARY);
         login.setTextSize(15);
         login.setAllCaps(false);
-        login.setTypeface(null, android.graphics.Typeface.BOLD);
+        login.setTypeface(null, Typeface.BOLD);
         GradientDrawable pill = new GradientDrawable();
         pill.setShape(GradientDrawable.RECTANGLE);
         pill.setColor(ACCENT_RED);
@@ -151,9 +175,6 @@ public class LoginActivity extends Activity {
             LinearLayout.LayoutParams.WRAP_CONTENT);
         tLp.topMargin = dp(6);
         root.addView(tg, tLp);
-
-        tg.setOnClickListener(v ->
-            Toast.makeText(this, "Contact @VantaDisini on Telegram", Toast.LENGTH_SHORT).show());
     }
 
     private int dp(int v) {
