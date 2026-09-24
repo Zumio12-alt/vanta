@@ -11,17 +11,15 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-import android.widget.Toast;
 
 public class LoaderActivity extends Activity {
 
     private static final int TILE_BLUE = 0xFF0A6CFF;
-    private static final int TILE_DIM  = 0xFF232838;
-    private static final int TILE_RED  = 0xFFE51427;
     private static final int TEXT_PRIMARY = 0xFFFFFFFF;
     private static final int TEXT_SECONDARY = 0xFFB0B5BF;
     private static final int TEXT_POSITIVE = 0xFF19C37D;
     private static final int TEXT_NEGATIVE = 0xFFFF3B3B;
+    private static final int TEXT_DIM = 0xFF6E7380;
 
     private static final String[][] TARGETS = {
         { "CODM GARENA", "com.garena.game.codm" },
@@ -66,23 +64,17 @@ public class LoaderActivity extends Activity {
             list.addView(buildTargetRow(t[0], t[1]));
         }
 
-        // READ THIS CARD BEFORE LAUNCHING CODM
         TextView hint = new TextView(this);
-        hint.setText("start overlay first, then open CODM however you normally do.\n"
-            + "if you play through a clone app, open the game from inside that app.\n"
-            + "vanta does not need to launch the game.");
-        hint.setTextColor(0xFFB0B5BF);
-        hint.setTextSize(11);
+        hint.setText("if your game is hidden inside MultiSpace, status will read "
+            + "'Not visible' — that is normal. Tap Open Menu anyway.");
+        hint.setTextColor(TEXT_DIM);
+        hint.setTextSize(10);
         hint.setGravity(Gravity.CENTER);
-        hint.setPadding(dp(12), dp(12), dp(12), dp(12));
-        GradientDrawable hintBg = new GradientDrawable();
-        hintBg.setColor(0x33232838);
-        hintBg.setCornerRadius(dp(10));
-        hint.setBackground(hintBg);
+        hint.setPadding(dp(12), dp(8), dp(12), dp(8));
         LinearLayout.LayoutParams hLp = new LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT);
-        hLp.topMargin = dp(16);
+        hLp.topMargin = dp(8);
         list.addView(hint, hLp);
 
         TextView welcome = new TextView(this);
@@ -145,42 +137,31 @@ public class LoaderActivity extends Activity {
         run.setTextSize(13);
         run.setAllCaps(false);
         GradientDrawable btnBg = new GradientDrawable();
+        btnBg.setColor(TILE_BLUE);
         btnBg.setCornerRadius(dp(10));
+        run.setBackground(btnBg);
         run.setPadding(dp(22), 0, dp(22), 0);
         LinearLayout.LayoutParams runLp = new LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT, dp(44));
         row.addView(run, runLp);
 
-        boolean installed = isInstalled(pkg);
-        if (installed) {
-            status.setText("Detected");
+        // status is informational only — button always works
+        boolean visible = isVisible(pkg);
+        if (visible) {
+            status.setText("Visible to base");
             status.setTextColor(TEXT_POSITIVE);
-            btnBg.setColor(TILE_BLUE);
-            run.setBackground(btnBg);
-            run.setEnabled(true);
-            run.setOnClickListener(v ->
-                startActivity(new Intent(this, MainActivity.class)));
         } else {
-            status.setText("Not Detected");
+            status.setText("Not visible (hidden by MultiSpace)");
             status.setTextColor(TEXT_NEGATIVE);
-            btnBg.setColor(TILE_DIM);
-            run.setBackground(btnBg);
-            run.setEnabled(true);
-            run.setOnClickListener(v ->
-                Toast.makeText(this,
-                    "game not visible to package manager — if you use a clone app, "
-                    + "tap Open Menu anyway and start Vanta's overlay first.",
-                    Toast.LENGTH_LONG).show());
-            run.setOnLongClickListener(v -> {
-                startActivity(new Intent(this, MainActivity.class));
-                return true;
-            });
         }
+
+        run.setOnClickListener(v ->
+            startActivity(new Intent(this, MainActivity.class)));
 
         return row;
     }
 
-    private boolean isInstalled(String pkg) {
+    private boolean isVisible(String pkg) {
         try {
             getPackageManager().getPackageInfo(pkg, 0);
             return true;
