@@ -1,9 +1,7 @@
 package com.vanta.codm;
 
 import android.app.Activity;
-import android.content.ComponentName;
 import android.content.Intent;
-import android.content.pm.ResolveInfo;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -20,9 +18,6 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import com.vanta.codm.vision.VisionService;
-
-import java.util.ArrayList;
-import java.util.List;
 
 public class MainActivity extends Activity {
 
@@ -83,7 +78,6 @@ public class MainActivity extends Activity {
         exLp.gravity = Gravity.CENTER_HORIZONTAL;
         root.addView(expiry, exLp);
 
-        // START/STOP row
         LinearLayout rowA = new LinearLayout(this);
         rowA.setOrientation(LinearLayout.HORIZONTAL);
         LinearLayout.LayoutParams rowALp = new LinearLayout.LayoutParams(
@@ -103,7 +97,7 @@ public class MainActivity extends Activity {
                     Uri.parse("package:" + getPackageName())), REQ_OVERLAY);
             } else {
                 launchOverlay();
-                Toast.makeText(this, "overlay on — now open CODM", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "overlay on", Toast.LENGTH_SHORT).show();
             }
         });
 
@@ -115,7 +109,6 @@ public class MainActivity extends Activity {
         stop.setOnClickListener(v ->
             stopService(new Intent(this, OverlayService.class)));
 
-        // ENABLE ACCESSIBILITY
         View acc = buildTile("♿", "ENABLE ACCESSIBILITY", TILE_AMBER);
         LinearLayout.LayoutParams accLp = new LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, dp(66));
@@ -124,29 +117,36 @@ public class MainActivity extends Activity {
         acc.setOnClickListener(v -> {
             try {
                 startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
-                Toast.makeText(this,
-                    "find Vanta in the list and toggle it on",
-                    Toast.LENGTH_LONG).show();
+                Toast.makeText(this, "enable VANTA in the list", Toast.LENGTH_LONG).show();
             } catch (Throwable t) {
-                Toast.makeText(this, "open Settings → Accessibility manually",
-                    Toast.LENGTH_LONG).show();
+                Toast.makeText(this, "open Settings manually", Toast.LENGTH_LONG).show();
             }
         });
 
-        // GRANT VISION (screen capture)
         View cap = buildTile("◉", "GRANT VISION (screen capture)", TILE_TEAL);
         LinearLayout.LayoutParams capLp = new LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, dp(66));
         capLp.topMargin = dp(10);
         root.addView(cap, capLp);
         cap.setOnClickListener(v -> {
+            Log.i(TAG, "GRANT VISION tapped");
             MediaProjectionManager mpm = (MediaProjectionManager)
                 getSystemService(MEDIA_PROJECTION_SERVICE);
-            if (mpm == null) return;
-            startActivityForResult(mpm.createScreenCaptureIntent(), REQ_CAPTURE);
+            if (mpm == null) {
+                Toast.makeText(this, "no MediaProjectionManager", Toast.LENGTH_LONG).show();
+                return;
+            }
+            try {
+                Intent captureIntent = mpm.createScreenCaptureIntent();
+                Log.i(TAG, "starting capture intent");
+                startActivityForResult(captureIntent, REQ_CAPTURE);
+            } catch (Throwable t) {
+                Log.e(TAG, "createScreenCaptureIntent failed", t);
+                Toast.makeText(this, "capture intent failed: " + t.getMessage(),
+                    Toast.LENGTH_LONG).show();
+            }
         });
 
-        // Run The Game row
         View run = buildTile("▶", "Open Clone App", TILE_DIM);
         LinearLayout.LayoutParams runLp = new LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, dp(66));
@@ -154,7 +154,6 @@ public class MainActivity extends Activity {
         root.addView(run, runLp);
         run.setOnClickListener(v -> launchContainer());
 
-        // community
         LinearLayout comm = new LinearLayout(this);
         comm.setOrientation(LinearLayout.HORIZONTAL);
         comm.setGravity(Gravity.CENTER_VERTICAL);
@@ -199,7 +198,6 @@ public class MainActivity extends Activity {
         comm.setOnClickListener(v -> startActivity(new Intent(
             Intent.ACTION_VIEW, Uri.parse("https://t.me/VantaDisini"))));
 
-        // logout
         LinearLayout logout = new LinearLayout(this);
         logout.setOrientation(LinearLayout.HORIZONTAL);
         logout.setGravity(Gravity.CENTER);
@@ -233,25 +231,46 @@ public class MainActivity extends Activity {
     @Override
     protected void onActivityResult(int r, int c, Intent d) {
         super.onActivityResult(r, c, d);
+        Log.i(TAG, "onActivityResult req=" + r + " result=" + c + " data=" + (d != null));
 
-        if (r == REQ_OVERLAY && Settings.canDrawOverlays(this)) {
-            launchOverlay();
+        if (r == REQ_OVERLAY) {
+            if (Settings.canDrawOverlays(this)) {
+                launchOverlay();
+            } else {
+                Toast.makeText(this, "overlay permission denied",
+                    Toast.LENGTH_SHORT).show();
+            }
             return;
         }
 
         if (r == REQ_CAPTURE) {
-            if (c == RESULT_OK && d != null) {
+            if (c != RESULT_OK) {
+                Toast.makeText(this, "capture cancelled (code " + c + ")",
+                    Toast.LENGTH_LONG).show();
+                return;
+            }
+            if (d == null) {
+                Toast.makeText(this, "capture: no data returned",
+                    Toast.LENGTH_LONG).show();
+                return;
+            }
+
+            Toast.makeText(this, "starting vision service...", Toast.LENGTH_SHORT).show();
+            try {
                 Intent i = new Intent(this, VisionService.class);
                 i.putExtra(VisionService.EXTRA_RESULT_CODE, c);
                 i.putExtra(VisionService.EXTRA_RESULT_DATA, d);
-                if (Build.VERSION.SDK_INT >= 26) startForegroundService(i);
-                else startService(i);
-                Toast.makeText(this,
-                    "vision granted — enable AIMBOT in the panel",
+                if (Build.VERSION.SDK_INT >= 26) {
+                    startForegroundService(i);
+                    Log.i(TAG, "startForegroundService called");
+                } else {
+                    startService(i);
+                    Log.i(TAG, "startService called");
+                }
+            } catch (Throwable t) {
+                Log.e(TAG, "start VisionService failed", t);
+                Toast.makeText(this, "start failed: " + t.getMessage(),
                     Toast.LENGTH_LONG).show();
-            } else {
-                Toast.makeText(this, "screen capture denied",
-                    Toast.LENGTH_SHORT).show();
             }
         }
     }
