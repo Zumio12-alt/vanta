@@ -6,6 +6,7 @@ import android.app.NotificationManager;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.ServiceInfo;
 import android.graphics.Bitmap;
 import android.graphics.PixelFormat;
 import android.graphics.Rect;
@@ -33,7 +34,6 @@ public class VisionService extends Service {
     public static final String EXTRA_RESULT_CODE = "rc";
     public static final String EXTRA_RESULT_DATA = "rd";
 
-    // live state, written by the panel, read by the capture thread
     public static volatile boolean aimEnabled  = false;
     public static volatile float   aimFovPx    = 240f;
     public static volatile float   aimStrength = 0.25f;
@@ -49,45 +49,89 @@ public class VisionService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        startForegroundInternal();
-
-        if (intent == null || projection != null) return START_STICKY;
-
-        int rc = intent.getIntExtra(EXTRA_RESULT_CODE, 0);
-        Intent rd = intent.getParcelableExtra(EXTRA_RESULT_DATA);
-        if (rc == 0 || rd == null) {
-            Log.w(TAG, "no projection result");
+        // already running with an active projection — just re-foreground
+        if (projection != null) {
+            try { postForeground(); }
+            catch (Throwable t) { stopSelf(); }
             return START_STICKY;
         }
 
-        MediaProjectionManager mpm = (MediaProjectionManager)
-            getSystemService(Context.MEDIA_PROJECTION_SERVICE);
-        if (mpm == null) return START_STICKY;
+        try {
+            int rc = (intent == null) ? 0 : intent.getIntExtra(EXTRA_RESULT_CODE, 0);
+            Intent rd = (intent == null) ? null : intent.getParcelableExtra(EXTRA_RESULT_DATA);
 
-        projection = mpm.getMediaProjection(rc, rd);
-        if (projection == null) {
-            Log.w(TAG, "getMediaProjection null");
+            if (rc == 0 || rd == null) {
+                Log.w(TAG, "no projection token — stopping");
+                stopSelf();
+                return START_NOT_STICKY;
+            }
+
+            MediaProjectionManager mpm = (MediaProjectionManager)
+                getSystemService(Context.MEDIA_PROJECTION_SERVICE);
+            if (mpm == null) { stopSelf(); return START_NOT_STICKY; }
+
+            // 1. Consume the token and get projection object FIRST.
+            //    On Android 14, mediaProjection-type foreground requires an
+            //    active projection to already exist.
+            projection = mpm.getMediaProjection(rc, rd);
+            if (projection == null) {
+                Log.w(TAG, "getMediaProjection null — stopping");
+                stopSelf();
+                return START_NOT_STICKY;
+            }
+
+            // 2. Now go foreground with the mediaProjection type. Safe.
+            postForeground();
+
+            // 3. Set up the virtual display.
+            WindowManager wm = (WindowManager) getSystemService(WINDOW_SERVICE);
+            DisplayMetrics dm = new DisplayMetrics();
+            wm.getDefaultDisplay().getRealMetrics(dm);
+            screenW = dm.widthPixels;
+            screenH = dm.heightPixels;
+            density = dm.densityDpi;
+
+            reader = ImageReader.newInstance(screenW, screenH, PixelFormat.RGBA_8888, 2);
+            reader.setOnImageAvailableListener(this::onFrame, ui);
+
+            display = projection.createVirtualDisplay(
+                "vanta-vision",
+                screenW, screenH, density,
+                DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
+                reader.getSurface(), null, ui);
+
+            Log.i(TAG, "capture started " + screenW + "x" + screenH);
             return START_STICKY;
+
+        } catch (Throwable t) {
+            Log.e(TAG, "onStartCommand failed", t);
+            try { stopSelf(); } catch (Throwable ignored) {}
+            return START_NOT_STICKY;
         }
+    }
 
-        WindowManager wm = (WindowManager) getSystemService(WINDOW_SERVICE);
-        DisplayMetrics dm = new DisplayMetrics();
-        wm.getDefaultDisplay().getRealMetrics(dm);
-        screenW = dm.widthPixels;
-        screenH = dm.heightPixels;
-        density = dm.densityDpi;
+    private void postForeground() {
+        String ch = "vanta-vision";
+        if (Build.VERSION.SDK_INT >= 26) {
+            NotificationManager nm = getSystemService(NotificationManager.class);
+            if (nm != null) {
+                nm.createNotificationChannel(new NotificationChannel(
+                    ch, "vision", NotificationManager.IMPORTANCE_LOW));
+            }
+        }
+        Notification n = (Build.VERSION.SDK_INT >= 26
+            ? new Notification.Builder(this, ch)
+            : new Notification.Builder(this))
+            .setContentTitle("VANTA vision")
+            .setContentText("screen capture active")
+            .setSmallIcon(android.R.drawable.ic_menu_view)
+            .build();
 
-        reader = ImageReader.newInstance(screenW, screenH, PixelFormat.RGBA_8888, 2);
-        reader.setOnImageAvailableListener(this::onFrame, ui);
-
-        display = projection.createVirtualDisplay(
-            "vanta-vision",
-            screenW, screenH, density,
-            DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-            reader.getSurface(), null, ui);
-
-        Log.i(TAG, "capture started " + screenW + "x" + screenH);
-        return START_STICKY;
+        if (Build.VERSION.SDK_INT >= 29) {
+            startForeground(2, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION);
+        } else {
+            startForeground(2, n);
+        }
     }
 
     private void onFrame(ImageReader r) {
@@ -96,7 +140,7 @@ public class VisionService extends Service {
         if (img == null) return;
 
         long now = System.currentTimeMillis();
-        if (!aimEnabled || now - lastTick < 33) {  // 30 Hz cap
+        if (!aimEnabled || now - lastTick < 33) {
             img.close();
             return;
         }
@@ -115,11 +159,10 @@ public class VisionService extends Service {
                 for (int x = 0; x < screenW; ++x) {
                     int off = outBase + x * 4;
                     int src = rowBase + x * pxStride;
-                    // ImageReader RGBA_8888 -> Bitmap wants ARGB
-                    all[off]     = buf.get(src + 3); // A
-                    all[off + 1] = buf.get(src);     // R
-                    all[off + 2] = buf.get(src + 1); // G
-                    all[off + 3] = buf.get(src + 2); // B
+                    all[off]     = buf.get(src + 3);
+                    all[off + 1] = buf.get(src);
+                    all[off + 2] = buf.get(src + 1);
+                    all[off + 3] = buf.get(src + 2);
                 }
             }
 
@@ -159,25 +202,6 @@ public class VisionService extends Service {
         } finally {
             img.close();
         }
-    }
-
-    private void startForegroundInternal() {
-        String ch = "vanta-vision";
-        if (Build.VERSION.SDK_INT >= 26) {
-            NotificationManager nm = getSystemService(NotificationManager.class);
-            if (nm != null) {
-                nm.createNotificationChannel(new NotificationChannel(
-                    ch, "vision", NotificationManager.IMPORTANCE_LOW));
-            }
-        }
-        Notification n = (Build.VERSION.SDK_INT >= 26
-            ? new Notification.Builder(this, ch)
-            : new Notification.Builder(this))
-            .setContentTitle("VANTA vision")
-            .setContentText("screen capture active")
-            .setSmallIcon(android.R.drawable.ic_menu_view)
-            .build();
-        startForeground(2, n);
     }
 
     @Override
