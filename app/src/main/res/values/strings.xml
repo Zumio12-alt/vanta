@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">VANTA</string>
+    <string name="acc_desc">Enables Vanta aim assist gesture injection. Required for the AIMBOT toggle to do anything.</string>
+</resources>
