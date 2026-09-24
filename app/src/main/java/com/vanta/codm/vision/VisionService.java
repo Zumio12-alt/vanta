@@ -87,7 +87,14 @@ projection = mpm.getMediaProjection(rc, rd);
 if (projection == null) { toast("V6 projection null"); stopForeground(true); stopSelf(); return START_NOT_STICKY; }
 toast("V7 projection obtained");
 
-            WindowManager wm = (WindowManager) getSystemService(WINDOW_SERVICE);
+// Android 14 requires a callback registered BEFORE createVirtualDisplay.
+projection.registerCallback(new MediaProjection.Callback() {
+    @Override public void onStop() {
+        Log.i(TAG, "projection stopped by system");
+    }
+}, ui);
+
+WindowManager wm = (WindowManager) getSystemService(WINDOW_SERVICE);
             DisplayMetrics dm = new DisplayMetrics();
             wm.getDefaultDisplay().getRealMetrics(dm);
             screenW = dm.widthPixels;
