@@ -530,7 +530,7 @@ public final class PanelView extends LinearLayout {
 
     // ROWS (with state persistence)
     private void addLeftCheck(String label) {
-        final String key = currentTab.name() + "|chk|" + label;
+        final String key = "chk|" + label;
         final boolean[] on = { Boolean.TRUE.equals(checkStates.get(key)) };
 
         final TextView t = new TextView(getContext());
@@ -548,7 +548,7 @@ public final class PanelView extends LinearLayout {
     }
 
     private void addCenterToggle(String label, boolean def) {
-        final String key = currentTab.name() + "|tgl|" + label;
+        final String key = "tgl|" + label;
         Boolean saved = toggleStates.get(key);
         final boolean[] on = { saved != null ? saved : def };
 
