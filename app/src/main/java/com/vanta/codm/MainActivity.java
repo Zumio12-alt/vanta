@@ -1,8 +1,10 @@
 package com.vanta.codm;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.ComponentName;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.ResolveInfo;
 import android.graphics.Color;
 import android.graphics.Typeface;
@@ -25,6 +27,8 @@ public class MainActivity extends Activity {
 
     private static final String TAG = "VANTA-MAIN";
     private static final int REQ_OVERLAY = 0x4d4b;
+    private static final String PREFS = "vanta_launch";
+    private static final String KEY_MODE = "launch_mode";
 
     private static final int TILE_BLUE       = 0xFF0A6CFF;
     private static final int TILE_RED        = 0xFFE51427;
@@ -35,23 +39,26 @@ public class MainActivity extends Activity {
     private static final int TEXT_SECONDARY  = 0xFFB0B5BF;
     private static final int AMBER           = 0xFFF5A623;
 
-    // CODM Garena / Global / VN packages. Also try the common MultiSpace /
-    // Parallel Space containers when the game is only installed inside one.
-    private static final String[] GAME_PKGS = {
-        "com.garena.game.codm",
-        "com.activision.callofduty.shooter",
+    private static final String[] CONTAINER_PKGS = {
+        "com.amy.virtual",              // MultiSpace (this is the one in your log)
+        "com.lbe.parallel.intl",
+        "com.lbe.parallel",
+        "com.excean.multiple",
+        "com.excean.gspace",
+        "com.clone.android.dual.space",
+        "com.polestar.domultiple",
+        "com.dualspace.multiapp",
+        "com.x8.sandbox",
+        "io.f1vm.f1vm",
+        "com.waxmoon.ma.gp",
     };
 
-    private static final String[] CONTAINER_PKGS = {
-        "com.lbe.parallel.intl",       // Parallel Space International
-        "com.lbe.parallel",            // Parallel Space
-        "com.excean.multiple",         // Multiple Accounts
-        "com.excean.gspace",           // GSpace
-        "com.clone.android.dual.space",// Dual Space
-        "com.polestar.domultiple",     // Do Multiple
-        "com.dualspace.multiapp",      // DualSpace
-        "com.multi.parallel",          // generic
-    };
+    private static final int MODE_ASK = 0;
+    private static final int MODE_BASE = 1;
+    private static final int MODE_CONTAINER = 2;
+    private static final int MODE_MANUAL = 3;
+
+    private TextView runGameLabel;
 
     @Override
     protected void onCreate(Bundle b) {
@@ -89,7 +96,7 @@ public class MainActivity extends Activity {
         exLp.gravity = Gravity.CENTER_HORIZONTAL;
         root.addView(expiry, exLp);
 
-        // two tiles: START / STOP
+        // START / STOP overlay
         LinearLayout rowA = new LinearLayout(this);
         rowA.setOrientation(LinearLayout.HORIZONTAL);
         LinearLayout.LayoutParams rowALp = new LinearLayout.LayoutParams(
@@ -97,7 +104,7 @@ public class MainActivity extends Activity {
         rowALp.topMargin = dp(28);
         root.addView(rowA, rowALp);
 
-        View start = buildTile("▶", "START MENU", TILE_BLUE);
+        View start = buildTile("▶", "START OVERLAY", TILE_BLUE);
         LinearLayout.LayoutParams tLp1 = new LinearLayout.LayoutParams(
             0, LinearLayout.LayoutParams.MATCH_PARENT, 1f);
         tLp1.rightMargin = dp(10);
@@ -109,10 +116,11 @@ public class MainActivity extends Activity {
                     Uri.parse("package:" + getPackageName())), REQ_OVERLAY);
             } else {
                 launchOverlay();
+                Toast.makeText(this, "overlay running — now open CODM", Toast.LENGTH_SHORT).show();
             }
         });
 
-        View stop = buildTile("❚❚", "STOP MENU", TILE_RED);
+        View stop = buildTile("❚❚", "STOP OVERLAY", TILE_RED);
         LinearLayout.LayoutParams tLp2 = new LinearLayout.LayoutParams(
             0, LinearLayout.LayoutParams.MATCH_PARENT, 1f);
         tLp2.leftMargin = dp(10);
@@ -120,23 +128,24 @@ public class MainActivity extends Activity {
         stop.setOnClickListener(v ->
             stopService(new Intent(this, OverlayService.class)));
 
-        // Run The Game — resolves through containers
-        View run = buildTile("▶", "Run The Game", TILE_TEAL);
+        // Run The Game — adaptive. Changes label based on saved mode.
+        View run = buildTile("▶", labelForMode(), TILE_TEAL);
+        this.runGameLabel = (TextView) ((LinearLayout) run).getChildAt(1);
         LinearLayout.LayoutParams runLp = new LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, dp(88));
         runLp.topMargin = dp(20);
         root.addView(run, runLp);
         run.setOnClickListener(v -> launchGame());
 
-        // Open Container — direct route into MultiSpace
-        View cont = buildTile("⧉", "Open Container", TILE_DIM);
-        LinearLayout.LayoutParams contLp = new LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, dp(64));
-        contLp.topMargin = dp(12);
-        root.addView(cont, contLp);
-        cont.setOnClickListener(v -> launchContainer());
+        // Change launch mode
+        View change = buildTile("⚙", "How do you launch CODM?", TILE_DIM);
+        LinearLayout.LayoutParams changeLp = new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, dp(60));
+        changeLp.topMargin = dp(12);
+        root.addView(change, changeLp);
+        change.setOnClickListener(v -> showModeChooser());
 
-        // community
+        // community tile
         LinearLayout comm = new LinearLayout(this);
         comm.setOrientation(LinearLayout.HORIZONTAL);
         comm.setGravity(Gravity.CENTER_VERTICAL);
@@ -201,16 +210,6 @@ public class MainActivity extends Activity {
         loLp.gravity = Gravity.CENTER_HORIZONTAL;
         root.addView(logout, loLp);
 
-        TextView loIcon = new TextView(this);
-        loIcon.setText("⏻");
-        loIcon.setTextColor(TEXT_PRIMARY);
-        loIcon.setTextSize(18);
-        LinearLayout.LayoutParams loIconLp = new LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.WRAP_CONTENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT);
-        loIconLp.rightMargin = dp(10);
-        logout.addView(loIcon, loIconLp);
-
         TextView loText = new TextView(this);
         loText.setText("LogOut");
         loText.setTextColor(TEXT_PRIMARY);
@@ -227,17 +226,69 @@ public class MainActivity extends Activity {
         setContentView(root);
     }
 
-    // ---------- launching logic ----------
+    // ---------------- launch logic ----------------
+
+    private int getMode() {
+        return getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_MODE, MODE_ASK);
+    }
+
+    private void setMode(int m) {
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit().putInt(KEY_MODE, m).apply();
+        if (runGameLabel != null) runGameLabel.setText(labelForMode());
+    }
+
+    private String labelForMode() {
+        switch (getMode()) {
+            case MODE_BASE:      return "Run The Game";
+            case MODE_CONTAINER: return "Open Clone App";
+            case MODE_MANUAL:    return "I'll Open It Myself";
+            default:             return "Set Launch Mode";
+        }
+    }
+
+    private void showModeChooser() {
+        AlertDialog d = new AlertDialog.Builder(this)
+            .setTitle("How do you launch CODM?")
+            .setMessage(
+                "CODM aborts if launched directly when its data lives in a clone app.\n\n"
+                + "Pick the option that matches how you normally open the game.")
+            .setPositiveButton("Base install", (x, y) -> setMode(MODE_BASE))
+            .setNegativeButton("Clone app", (x, y) -> setMode(MODE_CONTAINER))
+            .setNeutralButton("I launch it myself", (x, y) -> setMode(MODE_MANUAL))
+            .create();
+        d.show();
+    }
 
     private void launchGame() {
-        for (String pkg : GAME_PKGS) {
+        int mode = getMode();
+        if (mode == MODE_ASK) {
+            showModeChooser();
+            return;
+        }
+        switch (mode) {
+            case MODE_BASE:
+                launchBase();
+                break;
+            case MODE_CONTAINER:
+                launchContainer();
+                break;
+            case MODE_MANUAL:
+                Toast.makeText(this,
+                    "overlay is running — open CODM however you normally do",
+                    Toast.LENGTH_LONG).show();
+                break;
+        }
+    }
+
+    private void launchBase() {
+        String[] pkgs = { "com.garena.game.codm", "com.activision.callofduty.shooter" };
+        for (String pkg : pkgs) {
             Intent i = resolveLauncher(pkg);
             if (i != null) {
-                Log.i(TAG, "launching " + pkg);
+                Log.i(TAG, "base launch " + pkg);
                 try {
                     startActivity(i);
                 } catch (Throwable t) {
-                    Log.e(TAG, "launch failed", t);
                     Toast.makeText(this, "launch failed: " + t.getMessage(),
                         Toast.LENGTH_LONG).show();
                 }
@@ -245,16 +296,30 @@ public class MainActivity extends Activity {
             }
         }
         Toast.makeText(this,
-            "CODM not launchable from base. Tap Open Container.",
+            "base install not launchable — switch mode to Clone app",
+            Toast.LENGTH_LONG).show();
+    }
+
+    private void launchContainer() {
+        for (String pkg : CONTAINER_PKGS) {
+            Intent i = getPackageManager().getLaunchIntentForPackage(pkg);
+            if (i != null) {
+                Log.i(TAG, "opening container " + pkg);
+                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(i);
+                Toast.makeText(this, "open CODM from inside " + pkg,
+                    Toast.LENGTH_LONG).show();
+                return;
+            }
+        }
+        Toast.makeText(this,
+            "no clone app found — switch mode to Base install or Manual",
             Toast.LENGTH_LONG).show();
     }
 
     private Intent resolveLauncher(String pkg) {
-        // first try: standard launcher intent
         Intent base = getPackageManager().getLaunchIntentForPackage(pkg);
         if (base != null) return base;
-
-        // fallback: query all MAIN/LAUNCHER activities for the package
         Intent q = new Intent(Intent.ACTION_MAIN);
         q.addCategory(Intent.CATEGORY_LAUNCHER);
         List<ResolveInfo> all = getPackageManager().queryIntentActivities(q, 0);
@@ -270,33 +335,10 @@ public class MainActivity extends Activity {
             matches.add(i);
         }
         if (matches.isEmpty()) return null;
-        if (matches.size() == 1) return matches.get(0);
-
-        // multiple launchers (base + container clones) -> let the user pick
-        Intent first = matches.remove(0);
-        Intent chooser = Intent.createChooser(first, "Launch CODM — pick instance");
-        chooser.putExtra(Intent.EXTRA_INITIAL_INTENTS,
-            matches.toArray(new Intent[0]));
-        chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        return chooser;
+        return matches.get(0);
     }
 
-    private void launchContainer() {
-        for (String pkg : CONTAINER_PKGS) {
-            Intent i = getPackageManager().getLaunchIntentForPackage(pkg);
-            if (i != null) {
-                Log.i(TAG, "opening container " + pkg);
-                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                startActivity(i);
-                return;
-            }
-        }
-        Toast.makeText(this,
-            "no known container found. Open your MultiSpace app manually.",
-            Toast.LENGTH_LONG).show();
-    }
-
-    // ---------- tiles ----------
+    // ---------------- tiles ----------------
 
     private View buildTile(String icon, String label, int color) {
         LinearLayout tile = new LinearLayout(this);
