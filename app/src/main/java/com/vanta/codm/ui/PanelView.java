@@ -12,8 +12,9 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
+import com.vanta.codm.vision.VisionService;
+
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 
 public final class PanelView extends LinearLayout {
@@ -27,6 +28,7 @@ public final class PanelView extends LinearLayout {
     private static final int TEXT_PRIMARY   = 0xFFFFFFFF;
     private static final int TEXT_SECONDARY = 0xFFB0B5BF;
     private static final int TEXT_DIM       = 0xFF6E7380;
+    private static final int TEXT_MOCK      = 0xFF6E7380;   // grey for unwired rows
     private static final int ACCENT_GREEN   = 0xFF19C37D;
     private static final int TOGGLE_OFF     = 0xFF3A3F4A;
     private static final int RAIL_BG        = 0xF00E1117;
@@ -52,12 +54,15 @@ public final class PanelView extends LinearLayout {
     private final List<LinearLayout> railRows = new ArrayList<>();
     private final List<String> allNames = new ArrayList<>();
 
-    // state
     private Tab currentTab = Tab.VISUAL;
     private int activeRailIndex = 0;
     private boolean keyboardShown = false;
-    private final HashMap<String, Boolean> toggleStates = new HashMap<>();
-    private final HashMap<String, Boolean> checkStates = new HashMap<>();
+
+    // FOV presets and strength presets
+    private static final float[] FOV_VALUES = { 60f, 90f, 120f, 180f, 240f };
+    private static final String[] FOV_LABELS = { "60", "90", "120", "180", "240" };
+    private static final float[] STR_VALUES = { 0.15f, 0.25f, 0.35f, 0.50f };
+    private static final String[] STR_LABELS = { "15%", "25%", "35%", "50%" };
 
     public PanelView(Context ctx) {
         super(ctx);
@@ -70,8 +75,6 @@ public final class PanelView extends LinearLayout {
         allNames.add("[BOT] SPECIAL OPS 2");
         allNames.add("[BOT] SPECIAL OPS 3");
         allNames.add("[BOT] SPECIAL OPS 4");
-        allNames.add("[BOT] RORK");
-        allNames.add("[BOT] DAVID MASON");
 
         // HEADER
         LinearLayout header = new LinearLayout(ctx);
@@ -136,7 +139,6 @@ public final class PanelView extends LinearLayout {
 
         header.setOnTouchListener(new DragListener());
 
-        // SUBTITLE
         tabSubtitle = new TextView(ctx);
         tabSubtitle.setText("ESP · WALLHACK · RADAR");
         tabSubtitle.setTextColor(TEXT_SECONDARY);
@@ -146,20 +148,17 @@ public final class PanelView extends LinearLayout {
         tabSubtitle.setPadding(dp(10), 0, dp(10), dp(6));
         addView(tabSubtitle, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
 
-        // BODY
         LinearLayout body = new LinearLayout(ctx);
         body.setOrientation(HORIZONTAL);
         body.setBackgroundColor(BG_PANEL);
         addView(body, new LayoutParams(LayoutParams.MATCH_PARENT, dp(360)));
 
-        // rail
         rail = new LinearLayout(ctx);
         rail.setOrientation(VERTICAL);
         rail.setBackgroundColor(RAIL_BG);
         rail.setPadding(0, dp(8), 0, 0);
         body.addView(rail, new LayoutParams(dp(RAIL_W), LayoutParams.MATCH_PARENT));
 
-        // left list
         ScrollView leftScroll = new ScrollView(ctx);
         leftScroll.setBackgroundColor(BG_PANEL);
         leftScroll.setPadding(dp(8), dp(4), dp(8), dp(4));
@@ -172,7 +171,6 @@ public final class PanelView extends LinearLayout {
         d1.setBackgroundColor(STROKE_PANEL);
         body.addView(d1, new LayoutParams(dp(1), LayoutParams.MATCH_PARENT));
 
-        // center
         ScrollView centerScroll = new ScrollView(ctx);
         centerScroll.setBackgroundColor(BG_PANEL);
         centerScroll.setPadding(dp(10), dp(4), dp(10), dp(4));
@@ -199,7 +197,6 @@ public final class PanelView extends LinearLayout {
         d2.setBackgroundColor(STROKE_PANEL);
         body.addView(d2, new LayoutParams(dp(1), LayoutParams.MATCH_PARENT));
 
-        // right pane (keyboard)
         rightPane = new LinearLayout(ctx);
         rightPane.setOrientation(VERTICAL);
         rightPane.setBackgroundColor(BG_PANEL);
@@ -231,7 +228,6 @@ public final class PanelView extends LinearLayout {
         nsLp.topMargin = dp(6);
         rightPane.addView(nameScroll, nsLp);
 
-        // FOOTER
         LinearLayout footer = new LinearLayout(ctx);
         footer.setOrientation(HORIZONTAL);
         footer.setBackgroundColor(BG_HEADER);
@@ -268,7 +264,6 @@ public final class PanelView extends LinearLayout {
         rightPane.setVisibility(keyboardShown ? VISIBLE : GONE);
     }
 
-    // DRAG
     private final class DragListener implements OnTouchListener {
         private float startRawX, startRawY;
         private int startPX, startPY;
@@ -309,7 +304,6 @@ public final class PanelView extends LinearLayout {
         }
     }
 
-    // RAIL — 4 icons, 4 tabs, exact 1:1 mapping
     private void buildRail() {
         String[] glyphs = { "◈", "◎", "▤", "⚙" };
         Tab[] tabs = { Tab.VISUAL, Tab.AIM, Tab.MISC, Tab.SETTINGS };
@@ -321,7 +315,6 @@ public final class PanelView extends LinearLayout {
             LinearLayout row = new LinearLayout(getContext());
             row.setOrientation(HORIZONTAL);
             row.setGravity(Gravity.CENTER);
-            row.setPadding(0, 0, 0, 0);
             row.setClickable(true);
 
             View indicator = new View(getContext());
@@ -351,7 +344,6 @@ public final class PanelView extends LinearLayout {
         }
     }
 
-    // KEYBOARD
     private void buildKeyboard() {
         String[] rows = { "1234567890", "QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM" };
         for (String r : rows) {
@@ -369,10 +361,8 @@ public final class PanelView extends LinearLayout {
             }
             keyboard.addView(line);
         }
-
         LinearLayout util = new LinearLayout(getContext());
         util.setOrientation(HORIZONTAL);
-
         TextView sp = makeKey("SPACE", 3f);
         sp.setOnClickListener(v -> {
             String s = search.getText().toString() + " ";
@@ -380,7 +370,6 @@ public final class PanelView extends LinearLayout {
             filterNames(s);
         });
         util.addView(sp);
-
         TextView bs = makeKey("<<", 1f);
         bs.setOnClickListener(v -> {
             String s = search.getText().toString();
@@ -389,14 +378,12 @@ public final class PanelView extends LinearLayout {
             filterNames(s);
         });
         util.addView(bs);
-
         TextView clr = makeKey("CLR", 1f);
         clr.setOnClickListener(v -> {
             search.setText("");
             filterNames("");
         });
         util.addView(clr);
-
         keyboard.addView(util);
     }
 
@@ -414,7 +401,6 @@ public final class PanelView extends LinearLayout {
         return k;
     }
 
-    // NAMES
     private void buildNameList() {
         for (String n : allNames) addName(n);
     }
@@ -436,7 +422,6 @@ public final class PanelView extends LinearLayout {
         }
     }
 
-    // TABS
     private void selectTab(Tab t) {
         currentTab = t;
         leftList.removeAllViews();
@@ -462,16 +447,16 @@ public final class PanelView extends LinearLayout {
                     "VEHICLE NAME", "VEHICLE HEALTH", "VEHICLE DISTANCE",
                     "WEAPONS", "AMMO", "THROWABLES", "ATTACHMENTS", "ARMOR",
                 };
-                for (String s : items) addLeftCheck(s);
-                addCenterToggle("AIMBOT 360",   false);
-                addCenterToggle("BULLET TRACK", false);
-                addCenterToggle("VISIBLE CHECK",false);
-                addCenterToggle("HIDE FOV",     false);
-                addCenterValue("AIM STRENGTH", "OFF");
-                addCenterValue("TRIGGER",      "NONE");
-                addCenterValue("TARGET",       "DISTANCE");
-                addCenterValue("POSITION",     "HEAD");
-                addCenterValue("FOV",          "0.000");
+                for (String s : items) addLeftCheck(s, false); // all memory
+                addToggleRow("AIMBOT 360",   false, null);
+                addToggleRow("BULLET TRACK", false, null);
+                addToggleRow("VISIBLE CHECK",false, null);
+                addToggleRow("HIDE FOV",     false, null);
+                addStrengthRow();
+                addStaticRow("TRIGGER",  "NONE");
+                addStaticRow("TARGET",   "DISTANCE");
+                addStaticRow("POSITION", "HEAD");
+                addFovRow();
                 break;
             }
             case AIM: {
@@ -479,19 +464,19 @@ public final class PanelView extends LinearLayout {
                 tabSubtitle.setText("AIM ASSIST · TRIGGER");
                 tabIconView.setText("◎");
                 String[] items = {
-                    "AIMBOT", "TRIGGER BOT", "SMOOTH AIM", "HITBOX HEAD",
+                    "TRIGGER BOT", "SMOOTH AIM", "HITBOX HEAD",
                     "VISIBLE ONLY", "IGNORE KNOCKED", "IGNORE TEAM",
                     "SNAPLINE", "FOV CIRCLE", "PREDICTION",
                 };
-                for (String s : items) addLeftCheck(s);
-                addCenterToggle("AIMBOT 360",   false);
-                addCenterToggle("BULLET TRACK", false);
-                addCenterToggle("VISIBLE CHECK",false);
-                addCenterValue("AIM STRENGTH", "OFF");
-                addCenterValue("TRIGGER",      "NONE");
-                addCenterValue("TARGET",       "DISTANCE");
-                addCenterValue("POSITION",     "HEAD");
-                addCenterValue("FOV",          "0.000");
+                for (String s : items) addLeftCheck(s, false);
+                addToggleRow("AIMBOT", VisionService.aimEnabled, () -> {
+                    VisionService.aimEnabled = !VisionService.aimEnabled;
+                });
+                addStrengthRow();
+                addFovRow();
+                addStaticRow("TRIGGER",  "NONE");
+                addStaticRow("TARGET",   "DISTANCE");
+                addStaticRow("POSITION", "HEAD");
                 break;
             }
             case MISC: {
@@ -504,53 +489,53 @@ public final class PanelView extends LinearLayout {
                     "NO FLASHBANGS", "WEAPON KINETIC", "DISABLE PARACHUTE",
                     "NO CROUCH", "SKIP TUTORIAL", "STREAM HIDE", "ANTI-BAN",
                 };
-                for (String s : items) addLeftCheck(s);
-                addCenterButton("RECOIL");
-                addCenterButton("SPREAD");
-                addCenterButton("RELOAD");
-                addCenterButton("SHAKE");
-                addCenterButton("SCOPE");
-                addCenterButton("SWITCH");
-                addCenterButton("HITBOX");
+                for (String s : items) addLeftCheck(s, false);
+                addActionRow("RECOIL");
+                addActionRow("SPREAD");
+                addActionRow("RELOAD");
+                addActionRow("SHAKE");
+                addActionRow("SCOPE");
+                addActionRow("SWITCH");
+                addActionRow("HITBOX");
                 break;
             }
             case SETTINGS: {
                 tabTitle.setText("SETTINGS");
                 tabSubtitle.setText("PREFERENCES");
                 tabIconView.setText("⚙");
-                addCenterToggle("STREAM MODE",     false);
-                addCenterToggle("HIDE MENU ICON",  false);
-                addCenterToggle("ANTI-SCREENSHOT", false);
-                addCenterValue("BUILD", "1.0.0");
-                addCenterValue("REGION", "GARENA");
+                addToggleRow("STREAM MODE",     false, null);
+                addToggleRow("HIDE MENU ICON",  false, null);
+                addToggleRow("ANTI-SCREENSHOT", false, null);
+                addStaticRow("BUILD",  "1.0.0");
+                addStaticRow("REGION", "GARENA");
+                addStaticRow("VISION", VisionService.aimEnabled ? "ARMED" : "idle");
                 break;
             }
         }
     }
 
-    // ROWS (with state persistence)
-    private void addLeftCheck(String label) {
-        final String key = "chk|" + label;
-        final boolean[] on = { Boolean.TRUE.equals(checkStates.get(key)) };
-
+    // LEFT CHECKBOX — dim if !wired
+    private void addLeftCheck(String label, boolean wired) {
         final TextView t = new TextView(getContext());
-        t.setText((on[0] ? "◉ " : "● ") + label);
-        t.setTextColor(on[0] ? ACCENT_GREEN : TEXT_PRIMARY);
+        t.setText("● " + label + (wired ? "" : "  ·ROOT"));
+        t.setTextColor(wired ? TEXT_PRIMARY : TEXT_MOCK);
         t.setTextSize(11);
         t.setPadding(dp(4), dp(8), dp(4), dp(8));
-        t.setOnClickListener(v -> {
-            on[0] = !on[0];
-            checkStates.put(key, on[0]);
-            t.setText((on[0] ? "◉ " : "● ") + label);
-            t.setTextColor(on[0] ? ACCENT_GREEN : TEXT_PRIMARY);
-        });
+        if (wired) {
+            final boolean[] on = { false };
+            t.setOnClickListener(v -> {
+                on[0] = !on[0];
+                t.setText((on[0] ? "◉ " : "● ") + label);
+                t.setTextColor(on[0] ? ACCENT_GREEN : TEXT_PRIMARY);
+            });
+        }
         leftList.addView(t);
     }
 
-    private void addCenterToggle(String label, boolean def) {
-        final String key = "tgl|" + label;
-        Boolean saved = toggleStates.get(key);
-        final boolean[] on = { saved != null ? saved : def };
+    // CENTER TOGGLE — onChange null = mock/dim
+    private void addToggleRow(final String label, boolean initial, final Runnable onChange) {
+        final boolean wired = (onChange != null);
+        final boolean[] on = { initial };
 
         LinearLayout row = new LinearLayout(getContext());
         row.setOrientation(HORIZONTAL);
@@ -558,8 +543,8 @@ public final class PanelView extends LinearLayout {
         row.setPadding(0, dp(8), 0, dp(8));
 
         TextView tv = new TextView(getContext());
-        tv.setText(label);
-        tv.setTextColor(TEXT_PRIMARY);
+        tv.setText(label + (wired ? "" : "  ·ROOT"));
+        tv.setTextColor(wired ? TEXT_PRIMARY : TEXT_MOCK);
         tv.setTextSize(11);
         row.addView(tv, new LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f));
 
@@ -567,16 +552,21 @@ public final class PanelView extends LinearLayout {
         pill.setBackground(pillDrawable(on[0]));
         row.addView(pill, new LayoutParams(dp(34), dp(18)));
 
-        row.setOnClickListener(v -> {
-            on[0] = !on[0];
-            toggleStates.put(key, on[0]);
-            pill.setBackground(pillDrawable(on[0]));
-        });
+        if (wired) {
+            row.setOnClickListener(v -> {
+                onChange.run();
+                // read the new value from VisionService to stay in sync
+                if (label.equals("AIMBOT")) on[0] = VisionService.aimEnabled;
+                else on[0] = !on[0];
+                pill.setBackground(pillDrawable(on[0]));
+            });
+        }
 
         centerList.addView(row);
     }
 
-    private void addCenterValue(String label, String value) {
+    // STATIC VALUE (no interaction)
+    private void addStaticRow(String label, String value) {
         LinearLayout row = new LinearLayout(getContext());
         row.setOrientation(HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
@@ -584,13 +574,13 @@ public final class PanelView extends LinearLayout {
 
         TextView l = new TextView(getContext());
         l.setText(label);
-        l.setTextColor(TEXT_SECONDARY);
+        l.setTextColor(TEXT_MOCK);
         l.setTextSize(11);
         row.addView(l, new LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f));
 
         TextView v = new TextView(getContext());
         v.setText(value);
-        v.setTextColor(TEXT_PRIMARY);
+        v.setTextColor(TEXT_MOCK);
         v.setTextSize(11);
         v.setTypeface(null, Typeface.BOLD);
         row.addView(v);
@@ -598,7 +588,82 @@ public final class PanelView extends LinearLayout {
         centerList.addView(row);
     }
 
-    private void addCenterButton(String label) {
+    // FOV cycle row — tap to advance through presets
+    private void addFovRow() {
+        LinearLayout row = new LinearLayout(getContext());
+        row.setOrientation(HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(0, dp(8), 0, dp(8));
+
+        TextView l = new TextView(getContext());
+        l.setText("FOV");
+        l.setTextColor(TEXT_PRIMARY);
+        l.setTextSize(11);
+        row.addView(l, new LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f));
+
+        int cur = indexOfFloat(FOV_VALUES, VisionService.aimFovPx, 0);
+        final int[] idx = { cur };
+
+        final TextView v = new TextView(getContext());
+        v.setText(FOV_LABELS[idx[0]]);
+        v.setTextColor(ACCENT_GREEN);
+        v.setTextSize(11);
+        v.setTypeface(null, Typeface.BOLD);
+        row.addView(v);
+
+        row.setOnClickListener(x -> {
+            idx[0] = (idx[0] + 1) % FOV_VALUES.length;
+            VisionService.aimFovPx = FOV_VALUES[idx[0]];
+            v.setText(FOV_LABELS[idx[0]]);
+        });
+
+        centerList.addView(row);
+    }
+
+    // AIM STRENGTH cycle row
+    private void addStrengthRow() {
+        LinearLayout row = new LinearLayout(getContext());
+        row.setOrientation(HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(0, dp(8), 0, dp(8));
+
+        TextView l = new TextView(getContext());
+        l.setText("AIM STRENGTH");
+        l.setTextColor(TEXT_PRIMARY);
+        l.setTextSize(11);
+        row.addView(l, new LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f));
+
+        int cur = indexOfFloat(STR_VALUES, VisionService.aimStrength, 1);
+        final int[] idx = { cur };
+
+        final TextView v = new TextView(getContext());
+        v.setText(STR_LABELS[idx[0]]);
+        v.setTextColor(ACCENT_GREEN);
+        v.setTextSize(11);
+        v.setTypeface(null, Typeface.BOLD);
+        row.addView(v);
+
+        row.setOnClickListener(x -> {
+            idx[0] = (idx[0] + 1) % STR_VALUES.length;
+            VisionService.aimStrength = STR_VALUES[idx[0]];
+            v.setText(STR_LABELS[idx[0]]);
+        });
+
+        centerList.addView(row);
+    }
+
+    private static int indexOfFloat(float[] arr, float val, int def) {
+        int best = def;
+        float diff = Float.MAX_VALUE;
+        for (int i = 0; i < arr.length; ++i) {
+            float d = Math.abs(arr[i] - val);
+            if (d < diff) { diff = d; best = i; }
+        }
+        return best;
+    }
+
+    // QUICK HACKS action button (mock)
+    private void addActionRow(String label) {
         LinearLayout row = new LinearLayout(getContext());
         row.setOrientation(HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
@@ -607,21 +672,21 @@ public final class PanelView extends LinearLayout {
         LinearLayout btn = new LinearLayout(getContext());
         btn.setOrientation(HORIZONTAL);
         btn.setGravity(Gravity.CENTER);
-        btn.setBackground(rounded(0xFFE51427, 6, 0, 0));
+        btn.setBackground(rounded(0x55E51427, 6, 1, 0x33E51427));
         LayoutParams btnLp = new LayoutParams(0, dp(32), 1f);
         row.addView(btn, btnLp);
 
         TextView t = new TextView(getContext());
-        t.setText(label);
-        t.setTextColor(TEXT_PRIMARY);
+        t.setText(label + " ·ROOT");
+        t.setTextColor(TEXT_MOCK);
         t.setTextSize(11);
         t.setTypeface(null, Typeface.BOLD);
         t.setLetterSpacing(0.1f);
         btn.addView(t);
 
         TextView pct = new TextView(getContext());
-        pct.setText("0%");
-        pct.setTextColor(TEXT_PRIMARY);
+        pct.setText("—");
+        pct.setTextColor(TEXT_MOCK);
         pct.setTextSize(11);
         pct.setGravity(Gravity.END);
         LayoutParams pLp = new LayoutParams(dp(36), LayoutParams.WRAP_CONTENT);
@@ -630,7 +695,6 @@ public final class PanelView extends LinearLayout {
         centerList.addView(row);
     }
 
-    // HELPERS
     private GradientDrawable rounded(int color, int radiusDp, int strokeWidthDp, int strokeColor) {
         GradientDrawable g = new GradientDrawable();
         g.setColor(color);
