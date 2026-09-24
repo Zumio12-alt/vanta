@@ -1,7 +1,9 @@
 package com.vanta.codm;
 
+import android.Manifest;
 import android.app.Activity;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -24,6 +26,7 @@ public class MainActivity extends Activity {
     private static final String TAG = "VANTA-MAIN";
     private static final int REQ_OVERLAY = 0x4d4b;
     private static final int REQ_CAPTURE = 0x4d4c;
+    private static final int REQ_NOTIF   = 0x4d4d;
 
     private static final int TILE_BLUE       = 0xFF0A6CFF;
     private static final int TILE_RED        = 0xFFE51427;
@@ -123,6 +126,13 @@ public class MainActivity extends Activity {
             }
         });
 
+        View notif = buildTile("🔔", "ALLOW NOTIFICATIONS", TILE_AMBER);
+        LinearLayout.LayoutParams notifLp = new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, dp(58));
+        notifLp.topMargin = dp(10);
+        root.addView(notif, notifLp);
+        notif.setOnClickListener(v -> requestNotificationPermission());
+
         View cap = buildTile("◉", "GRANT VISION (screen capture)", TILE_TEAL);
         LinearLayout.LayoutParams capLp = new LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, dp(66));
@@ -130,6 +140,13 @@ public class MainActivity extends Activity {
         root.addView(cap, capLp);
         cap.setOnClickListener(v -> {
             Log.i(TAG, "GRANT VISION tapped");
+            if (!hasNotificationPermission()) {
+                Toast.makeText(this,
+                    "grant notifications first — mediaProjection needs them",
+                    Toast.LENGTH_LONG).show();
+                requestNotificationPermission();
+                return;
+            }
             MediaProjectionManager mpm = (MediaProjectionManager)
                 getSystemService(MEDIA_PROJECTION_SERVICE);
             if (mpm == null) {
@@ -149,7 +166,7 @@ public class MainActivity extends Activity {
 
         View run = buildTile("▶", "Open Clone App", TILE_DIM);
         LinearLayout.LayoutParams runLp = new LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, dp(66));
+            LinearLayout.LayoutParams.MATCH_PARENT, dp(60));
         runLp.topMargin = dp(10);
         root.addView(run, runLp);
         run.setOnClickListener(v -> launchContainer());
@@ -163,7 +180,7 @@ public class MainActivity extends Activity {
         commBg.setCornerRadius(dp(14));
         comm.setBackground(commBg);
         LinearLayout.LayoutParams commLp = new LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, dp(72));
+            LinearLayout.LayoutParams.MATCH_PARENT, dp(68));
         commLp.topMargin = dp(14);
         root.addView(comm, commLp);
 
@@ -208,7 +225,7 @@ public class MainActivity extends Activity {
         logout.setBackground(loBg);
         LinearLayout.LayoutParams loLp = new LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT, dp(48));
-        loLp.topMargin = dp(22);
+        loLp.topMargin = dp(20);
         loLp.gravity = Gravity.CENTER_HORIZONTAL;
         root.addView(logout, loLp);
 
@@ -228,30 +245,54 @@ public class MainActivity extends Activity {
         setContentView(root);
     }
 
+    private boolean hasNotificationPermission() {
+        if (Build.VERSION.SDK_INT < 33) return true;
+        return checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
+            == PackageManager.PERMISSION_GRANTED;
+    }
+
+    private void requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT < 33) {
+            Toast.makeText(this, "notifications always allowed on this Android",
+                Toast.LENGTH_SHORT).show();
+            return;
+        }
+        requestPermissions(new String[]{ Manifest.permission.POST_NOTIFICATIONS }, REQ_NOTIF);
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int req, String[] perms, int[] results) {
+        super.onRequestPermissionsResult(req, perms, results);
+        if (req == REQ_NOTIF) {
+            if (results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED) {
+                Toast.makeText(this, "notifications granted — now tap GRANT VISION",
+                    Toast.LENGTH_LONG).show();
+            } else {
+                Toast.makeText(this,
+                    "notifications denied. open Settings → Apps → VANTA → notifications → allow",
+                    Toast.LENGTH_LONG).show();
+            }
+        }
+    }
+
     @Override
     protected void onActivityResult(int r, int c, Intent d) {
         super.onActivityResult(r, c, d);
         Log.i(TAG, "onActivityResult req=" + r + " result=" + c + " data=" + (d != null));
 
         if (r == REQ_OVERLAY) {
-            if (Settings.canDrawOverlays(this)) {
-                launchOverlay();
-            } else {
-                Toast.makeText(this, "overlay permission denied",
-                    Toast.LENGTH_SHORT).show();
-            }
+            if (Settings.canDrawOverlays(this)) launchOverlay();
+            else Toast.makeText(this, "overlay permission denied", Toast.LENGTH_SHORT).show();
             return;
         }
 
         if (r == REQ_CAPTURE) {
             if (c != RESULT_OK) {
-                Toast.makeText(this, "capture cancelled (code " + c + ")",
-                    Toast.LENGTH_LONG).show();
+                Toast.makeText(this, "capture cancelled (code " + c + ")", Toast.LENGTH_LONG).show();
                 return;
             }
             if (d == null) {
-                Toast.makeText(this, "capture: no data returned",
-                    Toast.LENGTH_LONG).show();
+                Toast.makeText(this, "capture: no data returned", Toast.LENGTH_LONG).show();
                 return;
             }
 
@@ -269,8 +310,7 @@ public class MainActivity extends Activity {
                 }
             } catch (Throwable t) {
                 Log.e(TAG, "start VisionService failed", t);
-                Toast.makeText(this, "start failed: " + t.getMessage(),
-                    Toast.LENGTH_LONG).show();
+                Toast.makeText(this, "start failed: " + t.getMessage(), Toast.LENGTH_LONG).show();
             }
         }
     }
@@ -305,7 +345,7 @@ public class MainActivity extends Activity {
         TextView ico = new TextView(this);
         ico.setText(icon);
         ico.setTextColor(TEXT_PRIMARY);
-        ico.setTextSize(26);
+        ico.setTextSize(24);
         ico.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams icoLp = new LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT,
