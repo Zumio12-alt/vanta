@@ -429,7 +429,7 @@ public final class PanelView extends LinearLayout {
         centerList.removeAllViews();
 
         for (int i = 0; i < railRows.size(); ++i) {
-            View row = railRows.get(i);
+            LinearLayout row = railRows.get(i);
             // rail_indicator is child 0
             row.getChildAt(0).setVisibility(i == t.ordinal() ? VISIBLE : INVISIBLE);
             // icon color
