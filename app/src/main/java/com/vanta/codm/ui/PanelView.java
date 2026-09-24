@@ -47,7 +47,7 @@ public final class PanelView extends LinearLayout {
 
     // ---- state ----
     private Tab active = Tab.VISUAL;
-    private final List<View> railRows = new ArrayList<>();
+    private final List<LinearLayout> railRows = new ArrayList<>();
     private final List<String> allNames = new ArrayList<>();
 
     private final int headerHeightPx;
