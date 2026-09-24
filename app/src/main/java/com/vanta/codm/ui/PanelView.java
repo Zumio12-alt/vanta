@@ -1,13 +1,11 @@
 package com.vanta.codm.ui;
 
 import android.content.Context;
-import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
-import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -15,6 +13,7 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 
 public final class PanelView extends LinearLayout {
@@ -34,7 +33,6 @@ public final class PanelView extends LinearLayout {
     private static final int RAIL_ACTIVE    = 0xFF19C37D;
     private static final int RAIL_IDLE      = 0xFFB0B5BF;
 
-    // column widths — total under 340dp to fit phone portrait
     private static final int RAIL_W   = 44;
     private static final int LEFT_W   = 130;
     private static final int CENTER_W = 150;
@@ -50,12 +48,16 @@ public final class PanelView extends LinearLayout {
     private final TextView tabSubtitle;
     private final TextView tabIconView;
     private final EditText search;
-    private final TextView kbToggle;
 
     private final List<LinearLayout> railRows = new ArrayList<>();
     private final List<String> allNames = new ArrayList<>();
 
+    // state
+    private Tab currentTab = Tab.VISUAL;
+    private int activeRailIndex = 0;
     private boolean keyboardShown = false;
+    private final HashMap<String, Boolean> toggleStates = new HashMap<>();
+    private final HashMap<String, Boolean> checkStates = new HashMap<>();
 
     public PanelView(Context ctx) {
         super(ctx);
@@ -71,7 +73,7 @@ public final class PanelView extends LinearLayout {
         allNames.add("[BOT] RORK");
         allNames.add("[BOT] DAVID MASON");
 
-        // ============ HEADER ============
+        // HEADER
         LinearLayout header = new LinearLayout(ctx);
         header.setOrientation(HORIZONTAL);
         header.setGravity(Gravity.CENTER_VERTICAL);
@@ -110,7 +112,7 @@ public final class PanelView extends LinearLayout {
         ttLp.leftMargin = dp(6);
         header.addView(tabTitle, ttLp);
 
-        kbToggle = new TextView(ctx);
+        TextView kbToggle = new TextView(ctx);
         kbToggle.setText("⌨");
         kbToggle.setTextColor(TEXT_PRIMARY);
         kbToggle.setTextSize(15);
@@ -134,7 +136,7 @@ public final class PanelView extends LinearLayout {
 
         header.setOnTouchListener(new DragListener());
 
-        // ============ SUBTITLE ============
+        // SUBTITLE
         tabSubtitle = new TextView(ctx);
         tabSubtitle.setText("ESP · WALLHACK · RADAR");
         tabSubtitle.setTextColor(TEXT_SECONDARY);
@@ -144,7 +146,7 @@ public final class PanelView extends LinearLayout {
         tabSubtitle.setPadding(dp(10), 0, dp(10), dp(6));
         addView(tabSubtitle, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
 
-        // ============ BODY ============
+        // BODY
         LinearLayout body = new LinearLayout(ctx);
         body.setOrientation(HORIZONTAL);
         body.setBackgroundColor(BG_PANEL);
@@ -157,7 +159,7 @@ public final class PanelView extends LinearLayout {
         rail.setPadding(0, dp(8), 0, 0);
         body.addView(rail, new LayoutParams(dp(RAIL_W), LayoutParams.MATCH_PARENT));
 
-        // left scroll
+        // left list
         ScrollView leftScroll = new ScrollView(ctx);
         leftScroll.setBackgroundColor(BG_PANEL);
         leftScroll.setPadding(dp(8), dp(4), dp(8), dp(4));
@@ -197,7 +199,7 @@ public final class PanelView extends LinearLayout {
         d2.setBackgroundColor(STROKE_PANEL);
         body.addView(d2, new LayoutParams(dp(1), LayoutParams.MATCH_PARENT));
 
-        // right pane — hidden by default
+        // right pane (keyboard)
         rightPane = new LinearLayout(ctx);
         rightPane.setOrientation(VERTICAL);
         rightPane.setBackgroundColor(BG_PANEL);
@@ -229,7 +231,7 @@ public final class PanelView extends LinearLayout {
         nsLp.topMargin = dp(6);
         rightPane.addView(nameScroll, nsLp);
 
-        // ============ FOOTER ============
+        // FOOTER
         LinearLayout footer = new LinearLayout(ctx);
         footer.setOrientation(HORIZONTAL);
         footer.setBackgroundColor(BG_HEADER);
@@ -261,19 +263,12 @@ public final class PanelView extends LinearLayout {
 
     private void toggleKeyboard() {
         keyboardShown = !keyboardShown;
-        if (keyboardShown) {
-            // hide center, show keyboard pane
-            View centerScroll = (View) centerCol.getParent();
-            centerScroll.setVisibility(GONE);
-            rightPane.setVisibility(VISIBLE);
-        } else {
-            View centerScroll = (View) centerCol.getParent();
-            centerScroll.setVisibility(VISIBLE);
-            rightPane.setVisibility(GONE);
-        }
+        View centerScroll = (View) centerCol.getParent();
+        centerScroll.setVisibility(keyboardShown ? GONE : VISIBLE);
+        rightPane.setVisibility(keyboardShown ? VISIBLE : GONE);
     }
 
-    // ============ DRAG ============
+    // DRAG
     private final class DragListener implements OnTouchListener {
         private float startRawX, startRawY;
         private int startPX, startPY;
@@ -314,22 +309,24 @@ public final class PanelView extends LinearLayout {
         }
     }
 
-    // ============ RAIL ============
+    // RAIL — 4 icons, 4 tabs, exact 1:1 mapping
     private void buildRail() {
-        String[] glyphs = { "◉", "◈", "◎", "▤", "⚙" };
-        Tab[] tabs = { Tab.VISUAL, Tab.VISUAL, Tab.AIM, Tab.MISC, Tab.SETTINGS };
+        String[] glyphs = { "◈", "◎", "▤", "⚙" };
+        Tab[] tabs = { Tab.VISUAL, Tab.AIM, Tab.MISC, Tab.SETTINGS };
 
         for (int i = 0; i < glyphs.length; ++i) {
+            final int railIdx = i;
+            final Tab t = tabs[i];
+
             LinearLayout row = new LinearLayout(getContext());
             row.setOrientation(HORIZONTAL);
             row.setGravity(Gravity.CENTER);
-            row.setPadding(0, dp(10), 0, dp(10));
+            row.setPadding(0, 0, 0, 0);
             row.setClickable(true);
-            row.setFocusable(true);
 
             View indicator = new View(getContext());
             indicator.setBackgroundColor(RAIL_ACTIVE);
-            LayoutParams indLp = new LayoutParams(dp(3), dp(22));
+            LayoutParams indLp = new LayoutParams(dp(3), dp(24));
             indLp.rightMargin = dp(6);
             indicator.setVisibility(INVISIBLE);
             row.addView(indicator, indLp);
@@ -341,18 +338,20 @@ public final class PanelView extends LinearLayout {
             icon.setGravity(Gravity.CENTER);
             row.addView(icon, new LayoutParams(dp(28), dp(28)));
 
-            final Tab t = tabs[i];
-            View.OnClickListener click = v -> selectTab(t);
+            View.OnClickListener click = v -> {
+                activeRailIndex = railIdx;
+                selectTab(t);
+            };
             row.setOnClickListener(click);
             icon.setOnClickListener(click);
             indicator.setClickable(false);
 
             railRows.add(row);
-            rail.addView(row, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
+            rail.addView(row, new LayoutParams(LayoutParams.MATCH_PARENT, dp(52)));
         }
     }
 
-    // ============ KEYBOARD ============
+    // KEYBOARD
     private void buildKeyboard() {
         String[] rows = { "1234567890", "QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM" };
         for (String r : rows) {
@@ -415,7 +414,7 @@ public final class PanelView extends LinearLayout {
         return k;
     }
 
-    // ============ NAMES ============
+    // NAMES
     private void buildNameList() {
         for (String n : allNames) addName(n);
     }
@@ -437,8 +436,9 @@ public final class PanelView extends LinearLayout {
         }
     }
 
-    // ============ TABS ============
+    // TABS
     private void selectTab(Tab t) {
+        currentTab = t;
         leftList.removeAllViews();
         centerList.removeAllViews();
 
@@ -446,7 +446,7 @@ public final class PanelView extends LinearLayout {
             LinearLayout row = railRows.get(i);
             View indicator = row.getChildAt(0);
             TextView icon = (TextView) row.getChildAt(1);
-            boolean active = (i == t.ordinal());
+            boolean active = (i == activeRailIndex);
             indicator.setVisibility(active ? VISIBLE : INVISIBLE);
             icon.setTextColor(active ? RAIL_ACTIVE : RAIL_IDLE);
         }
@@ -528,16 +528,19 @@ public final class PanelView extends LinearLayout {
         }
     }
 
-    // ============ ROWS ============
+    // ROWS (with state persistence)
     private void addLeftCheck(String label) {
+        final String key = currentTab.name() + "|chk|" + label;
+        final boolean[] on = { Boolean.TRUE.equals(checkStates.get(key)) };
+
         final TextView t = new TextView(getContext());
-        t.setText("● " + label);
-        t.setTextColor(TEXT_PRIMARY);
+        t.setText((on[0] ? "◉ " : "● ") + label);
+        t.setTextColor(on[0] ? ACCENT_GREEN : TEXT_PRIMARY);
         t.setTextSize(11);
         t.setPadding(dp(4), dp(8), dp(4), dp(8));
-        final boolean[] on = { false };
         t.setOnClickListener(v -> {
             on[0] = !on[0];
+            checkStates.put(key, on[0]);
             t.setText((on[0] ? "◉ " : "● ") + label);
             t.setTextColor(on[0] ? ACCENT_GREEN : TEXT_PRIMARY);
         });
@@ -545,6 +548,10 @@ public final class PanelView extends LinearLayout {
     }
 
     private void addCenterToggle(String label, boolean def) {
+        final String key = currentTab.name() + "|tgl|" + label;
+        Boolean saved = toggleStates.get(key);
+        final boolean[] on = { saved != null ? saved : def };
+
         LinearLayout row = new LinearLayout(getContext());
         row.setOrientation(HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
@@ -557,12 +564,12 @@ public final class PanelView extends LinearLayout {
         row.addView(tv, new LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f));
 
         final View pill = new View(getContext());
-        final boolean[] on = { def };
-        pill.setBackground(pillDrawable(def));
+        pill.setBackground(pillDrawable(on[0]));
         row.addView(pill, new LayoutParams(dp(34), dp(18)));
 
         row.setOnClickListener(v -> {
             on[0] = !on[0];
+            toggleStates.put(key, on[0]);
             pill.setBackground(pillDrawable(on[0]));
         });
 
@@ -623,7 +630,7 @@ public final class PanelView extends LinearLayout {
         centerList.addView(row);
     }
 
-    // ============ HELPERS ============
+    // HELPERS
     private GradientDrawable rounded(int color, int radiusDp, int strokeWidthDp, int strokeColor) {
         GradientDrawable g = new GradientDrawable();
         g.setColor(color);
