@@ -3,6 +3,7 @@ package com.vanta.codm;
 import android.app.Activity;
 import android.content.Intent;
 import android.graphics.Color;
+import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.view.Gravity;
@@ -10,17 +11,18 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 
 public class LoaderActivity extends Activity {
 
     private static final int TILE_BLUE = 0xFF0A6CFF;
     private static final int TILE_DIM  = 0xFF232838;
+    private static final int TILE_RED  = 0xFFE51427;
     private static final int TEXT_PRIMARY = 0xFFFFFFFF;
     private static final int TEXT_SECONDARY = 0xFFB0B5BF;
     private static final int TEXT_POSITIVE = 0xFF19C37D;
     private static final int TEXT_NEGATIVE = 0xFFFF3B3B;
 
-    // CODM regional packages
     private static final String[][] TARGETS = {
         { "CODM GARENA", "com.garena.game.codm" },
         { "CODM GLOBAL", "com.activision.callofduty.shooter" },
@@ -41,7 +43,7 @@ public class LoaderActivity extends Activity {
         brand.setTextColor(TEXT_PRIMARY);
         brand.setTextSize(26);
         brand.setLetterSpacing(0.15f);
-        brand.setTypeface(null, android.graphics.Typeface.BOLD);
+        brand.setTypeface(null, Typeface.BOLD);
         brand.setGravity(Gravity.CENTER);
         root.addView(brand);
 
@@ -64,6 +66,25 @@ public class LoaderActivity extends Activity {
             list.addView(buildTargetRow(t[0], t[1]));
         }
 
+        // READ THIS CARD BEFORE LAUNCHING CODM
+        TextView hint = new TextView(this);
+        hint.setText("start overlay first, then open CODM however you normally do.\n"
+            + "if you play through a clone app, open the game from inside that app.\n"
+            + "vanta does not need to launch the game.");
+        hint.setTextColor(0xFFB0B5BF);
+        hint.setTextSize(11);
+        hint.setGravity(Gravity.CENTER);
+        hint.setPadding(dp(12), dp(12), dp(12), dp(12));
+        GradientDrawable hintBg = new GradientDrawable();
+        hintBg.setColor(0x33232838);
+        hintBg.setCornerRadius(dp(10));
+        hint.setBackground(hintBg);
+        LinearLayout.LayoutParams hLp = new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT);
+        hLp.topMargin = dp(16);
+        list.addView(hint, hLp);
+
         TextView welcome = new TextView(this);
         welcome.setText("~ Welcome: VantaExternalCODM ~");
         welcome.setTextColor(TEXT_SECONDARY);
@@ -76,7 +97,7 @@ public class LoaderActivity extends Activity {
         welcome.setBackground(pillBg);
         LinearLayout.LayoutParams wLp = new LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, dp(48));
-        wLp.topMargin = dp(24);
+        wLp.topMargin = dp(20);
         list.addView(welcome, wLp);
 
         setContentView(root);
@@ -107,7 +128,7 @@ public class LoaderActivity extends Activity {
         nameView.setText(name);
         nameView.setTextColor(TEXT_PRIMARY);
         nameView.setTextSize(16);
-        nameView.setTypeface(null, android.graphics.Typeface.BOLD);
+        nameView.setTypeface(null, Typeface.BOLD);
         col.addView(nameView);
 
         TextView status = new TextView(this);
@@ -119,7 +140,7 @@ public class LoaderActivity extends Activity {
         col.addView(status, stLp);
 
         Button run = new Button(this);
-        run.setText("Run Menu");
+        run.setText("Open Menu");
         run.setTextColor(TEXT_PRIMARY);
         run.setTextSize(13);
         run.setAllCaps(false);
@@ -132,7 +153,7 @@ public class LoaderActivity extends Activity {
 
         boolean installed = isInstalled(pkg);
         if (installed) {
-            status.setText("Installed");
+            status.setText("Detected");
             status.setTextColor(TEXT_POSITIVE);
             btnBg.setColor(TILE_BLUE);
             run.setBackground(btnBg);
@@ -140,11 +161,20 @@ public class LoaderActivity extends Activity {
             run.setOnClickListener(v ->
                 startActivity(new Intent(this, MainActivity.class)));
         } else {
-            status.setText("Not Installed");
+            status.setText("Not Detected");
             status.setTextColor(TEXT_NEGATIVE);
             btnBg.setColor(TILE_DIM);
             run.setBackground(btnBg);
-            run.setEnabled(false);
+            run.setEnabled(true);
+            run.setOnClickListener(v ->
+                Toast.makeText(this,
+                    "game not visible to package manager — if you use a clone app, "
+                    + "tap Open Menu anyway and start Vanta's overlay first.",
+                    Toast.LENGTH_LONG).show());
+            run.setOnLongClickListener(v -> {
+                startActivity(new Intent(this, MainActivity.class));
+                return true;
+            });
         }
 
         return row;
