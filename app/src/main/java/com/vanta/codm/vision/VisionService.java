@@ -23,6 +23,7 @@ import android.os.Looper;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.WindowManager;
+import android.widget.Toast;
 
 import com.vanta.codm.input.GestureAccessibility;
 
@@ -47,12 +48,18 @@ public class VisionService extends Service {
     private int screenW, screenH, density;
     private long lastTick;
 
+    private void toast(final String msg) {
+        Log.i(TAG, msg);
+        ui.post(() -> Toast.makeText(getApplicationContext(), msg, Toast.LENGTH_SHORT).show());
+    }
+
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        // already running with an active projection — just re-foreground
+        toast("V1 service started");
+
         if (projection != null) {
-            try { postForeground(); }
-            catch (Throwable t) { stopSelf(); }
+            toast("V2 already running");
+            try { postForeground(); } catch (Throwable t) { toast("V2err " + t.getMessage()); }
             return START_STICKY;
         }
 
@@ -60,30 +67,26 @@ public class VisionService extends Service {
             int rc = (intent == null) ? 0 : intent.getIntExtra(EXTRA_RESULT_CODE, 0);
             Intent rd = (intent == null) ? null : intent.getParcelableExtra(EXTRA_RESULT_DATA);
 
-            if (rc == 0 || rd == null) {
-                Log.w(TAG, "no projection token — stopping");
-                stopSelf();
-                return START_NOT_STICKY;
-            }
+            if (rc == 0) { toast("V3 no result code"); stopSelf(); return START_NOT_STICKY; }
+            if (rd == null) { toast("V4 no result data"); stopSelf(); return START_NOT_STICKY; }
 
             MediaProjectionManager mpm = (MediaProjectionManager)
                 getSystemService(Context.MEDIA_PROJECTION_SERVICE);
-            if (mpm == null) { stopSelf(); return START_NOT_STICKY; }
+            if (mpm == null) { toast("V5 no mpm"); stopSelf(); return START_NOT_STICKY; }
 
-            // 1. Consume the token and get projection object FIRST.
-            //    On Android 14, mediaProjection-type foreground requires an
-            //    active projection to already exist.
             projection = mpm.getMediaProjection(rc, rd);
-            if (projection == null) {
-                Log.w(TAG, "getMediaProjection null — stopping");
+            if (projection == null) { toast("V6 projection null"); stopSelf(); return START_NOT_STICKY; }
+            toast("V7 projection obtained");
+
+            try {
+                postForeground();
+                toast("V8 foreground ok");
+            } catch (Throwable t) {
+                toast("V8err " + t.getClass().getSimpleName() + " " + t.getMessage());
                 stopSelf();
                 return START_NOT_STICKY;
             }
 
-            // 2. Now go foreground with the mediaProjection type. Safe.
-            postForeground();
-
-            // 3. Set up the virtual display.
             WindowManager wm = (WindowManager) getSystemService(WINDOW_SERVICE);
             DisplayMetrics dm = new DisplayMetrics();
             wm.getDefaultDisplay().getRealMetrics(dm);
@@ -100,10 +103,11 @@ public class VisionService extends Service {
                 DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
                 reader.getSurface(), null, ui);
 
-            Log.i(TAG, "capture started " + screenW + "x" + screenH);
+            toast("V9 capture " + screenW + "x" + screenH);
             return START_STICKY;
 
         } catch (Throwable t) {
+            toast("VX " + t.getClass().getSimpleName() + ": " + t.getMessage());
             Log.e(TAG, "onStartCommand failed", t);
             try { stopSelf(); } catch (Throwable ignored) {}
             return START_NOT_STICKY;
@@ -125,6 +129,7 @@ public class VisionService extends Service {
             .setContentTitle("VANTA vision")
             .setContentText("screen capture active")
             .setSmallIcon(android.R.drawable.ic_menu_view)
+            .setOngoing(true)
             .build();
 
         if (Build.VERSION.SDK_INT >= 29) {
@@ -209,6 +214,7 @@ public class VisionService extends Service {
         if (display != null) { display.release(); display = null; }
         if (projection != null) { projection.stop(); projection = null; }
         if (reader != null) { reader.close(); reader = null; }
+        Log.i(TAG, "service destroyed");
         super.onDestroy();
     }
 
