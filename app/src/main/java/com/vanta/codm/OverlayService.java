@@ -5,66 +5,72 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.Service;
 import android.content.Intent;
-import android.graphics.Color;
 import android.graphics.PixelFormat;
 import android.os.Build;
 import android.os.IBinder;
 import android.util.Log;
 import android.view.Gravity;
+import android.view.View;
 import android.view.WindowManager;
-import android.widget.TextView;
+
+import com.vanta.codm.ui.PanelView;
 
 public class OverlayService extends Service {
 
-    private static final String TAG = "VANTA";
+    private static final String TAG = "VANTA-OVERLAY";
+
     private WindowManager wm;
-    private TextView view;
+    private PanelView panel;
 
     @Override
     public void onCreate() {
         super.onCreate();
-        Log.i(TAG, "OverlayService onCreate");
+        Log.i(TAG, "onCreate");
         wm = (WindowManager) getSystemService(WINDOW_SERVICE);
         startForegroundInternal();
     }
 
     @Override
     public int onStartCommand(Intent i, int f, int s) {
-        if (view == null) attach();
+        if (panel == null) attach();
         return START_STICKY;
     }
 
     private void attach() {
-        view = new TextView(this);
-        view.setText("VANTA ACTIVE");
-        view.setTextColor(Color.WHITE);
-        view.setBackgroundColor(0xCC000000);
-        int p = (int)(16 * getResources().getDisplayMetrics().density);
-        view.setPadding(p, p, p, p);
+        panel = new PanelView(this);
+
+        int type = Build.VERSION.SDK_INT >= 26
+            ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+            : WindowManager.LayoutParams.TYPE_PHONE;
 
         WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
-            Build.VERSION.SDK_INT >= 26
-                ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-                : WindowManager.LayoutParams.TYPE_PHONE,
+            type,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT);
         lp.gravity = Gravity.TOP | Gravity.START;
-        lp.x = 100;
-        lp.y = 200;
+        lp.x = 60;
+        lp.y = 180;
 
-        wm.addView(view, lp);
-        Log.i(TAG, "overlay view attached");
+        try {
+            wm.addView(panel, lp);
+            Log.i(TAG, "panel attached");
+        } catch (Throwable t) {
+            Log.e(TAG, "addView failed", t);
+        }
     }
 
     private void startForegroundInternal() {
         String ch = "vanta";
         if (Build.VERSION.SDK_INT >= 26) {
             NotificationManager nm = getSystemService(NotificationManager.class);
-            nm.createNotificationChannel(new NotificationChannel(
-                ch, "vanta", NotificationManager.IMPORTANCE_LOW));
+            if (nm != null) {
+                nm.createNotificationChannel(new NotificationChannel(
+                    ch, "vanta", NotificationManager.IMPORTANCE_LOW));
+            }
         }
         Notification n = (Build.VERSION.SDK_INT >= 26
             ? new Notification.Builder(this, ch)
@@ -78,9 +84,9 @@ public class OverlayService extends Service {
 
     @Override
     public void onDestroy() {
-        if (view != null) {
-            try { wm.removeView(view); } catch (Throwable ignored) {}
-            view = null;
+        if (panel != null) {
+            try { wm.removeView(panel); } catch (Throwable ignored) {}
+            panel = null;
         }
         super.onDestroy();
     }
